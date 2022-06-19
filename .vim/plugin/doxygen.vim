@@ -1,4 +1,4 @@
-" TODO - header, g:loaded_, cpoptions
+" TODO - header, g:loaded_, cpoptions, remove bangs
 " Limit  number of tokens parsed
 const s:MAX_TOKENS = 128
 
@@ -14,21 +14,6 @@ function! PrintError(msg) abort
     echohl ErrorMsg
     echomsg a:msg
     echohl None
-endfunction
-
-
-function! GetVisibleBufferList() abort
-    let l:buf_list = map(getbufinfo({'buflisted': 1}), 'v:val.bufnr')
-
-    " If the current buffer is in the list, move it to the start
-    let l:cur_num = bufnr()
-    let l:cur_idx = index(l:buffers, cur_num)
-    if cur_idx >= 0
-        call remove(l:buf_list, cur_idx)
-        call insert(l:buf_list, cur_num)
-    endif
-
-    return l:buf_list
 endfunction
 
 
@@ -219,20 +204,62 @@ function! ParseFunctionProtoType() abort
 endfunction
 
 
+function! MatchBackForward(pattern) abort
+    let l:buf_num = bufnr()
+    let l:cur_line_num = line('.')
+
+    " Search backward from cursor position
+    let l:lines = getbufline(l:buf_num, 1, l:cur_line_num)
+    let l:lines = reverse(l:lines)
+    let l:match_idx = match(l:lines, a:pattern)
+    if l:match_idx >= 0
+        let l:match_idx = l:cur_line_num - l:match_idx - 1
+    else
+        " Search forward from cursor position
+        let l:lines = getbufline(l:buf_num, l:cur_line_num + 1, '$')
+        let l:match_idx = match(l:lines, a:pattern)
+        if l:match_idx >= 0
+            let l:match_idx += l:cur_line_num
+        endif
+    endif
+
+    " Note this is a list index, not a line number
+    return l:match_idx
+endfunction
+
+
 function! FindDuplicateParam(param) abort
     let l:duplicate = v:null
     let l:pattern = '^\s*\* @param ' . a:param
 
-    " TODO: 'ignorecase', 'smartcase' and 'magic' are used.
-    let l:line_num = search(l:pattern, 'bnw')
-    if line_num > 0
-        let l:duplicate = [getline(l:line_num)]
+    " Search current buffer first
+    let l:buf_num = bufnr()
+    let l:match_idx = MatchBackForward(l:pattern)
+
+    if l:match_idx < 0
+        " Try other buffers
+        let l:keys = #{buflisted: 1, bufloaded: 1}
+        for buf_info in getbufinfo(l:keys)
+            if l:buf_num != buf_info.bufnr
+                let l:lines = getbufline(buf_info.bufnr, 1, '$')
+                let l:match_idx = match(l:lines, l:pattern)
+                if l:match_idx >= 0
+                    let l:buf_num = buf_info.bufnr
+                    break
+                endif
+            endif
+        endfor
+    endif
+
+    if l:match_idx >= 0
+        let l:match_line_num = l:match_idx + 1
+        let l:duplicate = getbufline(l:buf_num, l:match_line_num)
         let l:loop = 1
         while loop
-            let l:line_num += 1
-            let l:check_line = getline(l:line_num)
-            if match(l:check_line, '^\s*\*\s*[^/@[:space:]]') >= 0
-                let l:duplicate += [check_line]
+            let l:match_line_num += 1
+            let l:check_list = getbufline(l:buf_num, l:match_line_num)
+            if match(l:check_list, '^\s*\*\s*[^/@[:space:]]') >= 0
+                let l:duplicate += l:check_list
             else
                 let l:loop = 0
             endif
