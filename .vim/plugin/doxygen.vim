@@ -10,29 +10,29 @@ const s:MAX_TOKENS = 128
 "   for goto if inline int long register restrict return short signed sizeof
 "   static struct switch typedef union unsigned void volatile while
 
-function PrintError(msg) abort
+function s:PrintError(msg) abort
     echohl ErrorMsg
     echomsg a:msg
     echohl None
 endfunction
 
 
-function IsSymbol(token) abort
+function s:IsSymbol(token) abort
     return match(a:token, '\w') < 0
 endfunction
 
 
-function InList(list, item) abort
+function s:InList(list, item) abort
     return index(a:list, a:item) >= 0
 endfunction
 
 
-function InString(string, sub) abort
+function s:InString(string, sub) abort
     return stridx(a:string, a:sub) >= 0
 endfunction
 
 
-function NewTokeniser(allowed_symbols, disallowed_keywords) abort
+function s:NewTokeniser(allowed_symbols, disallowed_keywords) abort
     let l:tokeniser = #{
         \ tokens_remaining: s:MAX_TOKENS,
         \ allowed_symbols: a:allowed_symbols,
@@ -43,7 +43,7 @@ function NewTokeniser(allowed_symbols, disallowed_keywords) abort
         \ disallowed_keywords_stack: [],
     \ }
 
-    function tokeniser.next() abort
+    function l:tokeniser.next() abort
         if l:self.tokens_remaining <= 0
             throw 'invalid'
         endif
@@ -63,25 +63,23 @@ function NewTokeniser(allowed_symbols, disallowed_keywords) abort
 
         let l:token = remove(l:self.tokens, 0)
         let l:self.tokens_remaining -= 1
-        if IsSymbol(l:token)
-            if !InString(l:self.allowed_symbols, l:token)
+        if s:IsSymbol(l:token)
+            if !s:InString(l:self.allowed_symbols, l:token)
                 throw 'invalid'
             endif
-        elseif InList(l:self.disallowed_keywords, l:token)
+        elseif s:InList(l:self.disallowed_keywords, l:token)
             throw 'invalid'
         endif
 
         return token
     endfunction
 
-
-    function tokeniser.push_token(token) abort
+    function l:tokeniser.push_token(token) abort
         call insert(l:self.tokens, a:token)
         let l:self.tokens_remaining += 1
     endfunction
 
-
-    function tokeniser.push_context(allowed_symbols, disallowed_keywords) abort
+    function l:tokeniser.push_context(allowed_symbols, disallowed_keywords) abort
         let l:self.allowed_symbols_stack += [l:self.allowed_symbols]
         let l:self.disallowed_keywords_stack += [l:self.disallowed_keywords]
 
@@ -89,19 +87,17 @@ function NewTokeniser(allowed_symbols, disallowed_keywords) abort
         let l:self.disallowed_keywords = a:disallowed_keywords
     endfunction
 
-
-    function tokeniser.pop_context() abort
+    function l:tokeniser.pop_context() abort
         let l:self.allowed_symbols = remove(l:self.allowed_symbols_stack, -1)
         let l:self.disallowed_keywords =
                                 \ remove(l:self.disallowed_keywords_stack, -1)
     endfunction
 
-
     return tokeniser
 endfunction
 
 
-function SkipFunctionArrayDeclarators(tokeniser) abort
+function s:SkipFunctionArrayDeclarators(tokeniser) abort
     let l:allowed_symbols = "~!$%^&*()+./|\'-=<>?[]:\";"
     let l:disallowed_keywords = [
         \ 'auto', 'break', 'case', 'continue', 'default', 'do', 'else',  'for',
@@ -114,14 +110,14 @@ function SkipFunctionArrayDeclarators(tokeniser) abort
     let l:open = 1
     while l:open > 0
         let l:token = a:tokeniser.next()
-        if ']' == l:token
+        if ']' ==# l:token
             let l:open -= 1
 
             " Parse next token to allow multidimensional arrays
             let l:token = a:tokeniser.next()
         endif
 
-        if '[' == l:token
+        if '[' ==# l:token
             let l:open += 1
         endif
     endwhile
@@ -133,14 +129,14 @@ endfunction
 
 
 " Not supported - attributes, functions returning a pointer to an array
-function ParseFunctionProtoType() abort
+function s:ParseFunctionProtoType() abort
     let l:allowed_symbols = '*(\'
     let l:disallowed_keywords = [
         \ 'auto', 'break', 'case', 'continue', 'default', 'do', 'else', 'for',
         \ 'goto', 'if', 'return', 'sizeof', 'switch', 'typedef'
     \ ]
 
-    let l:tokeniser = NewTokeniser(l:allowed_symbols, l:disallowed_keywords)
+    let l:tokeniser = s:NewTokeniser(l:allowed_symbols, l:disallowed_keywords)
 
     " Parse qualifiers/return type/name
     let l:have_name = 0
@@ -148,7 +144,7 @@ function ParseFunctionProtoType() abort
     let l:token = v:null
     while l:token != '('
         let l:token = tokeniser.next()
-        if l:token == 'void'
+        if l:token ==# 'void'
             " If a * follows it's a void pointer, otherwise it's a return value
             let l:token = tokeniser.next()
             if l:token != '*'
@@ -157,7 +153,7 @@ function ParseFunctionProtoType() abort
         endif
 
         if l:token != '('
-            let l:have_name = !IsSymbol(l:token)
+            let l:have_name = !s:IsSymbol(l:token)
         endif
     endwhile
 
@@ -173,11 +169,11 @@ function ParseFunctionProtoType() abort
     let l:params = []
     while l:token != ')'
         let l:token = l:tokeniser.next()
-        if !IsSymbol(l:token)
+        if !s:IsSymbol(l:token)
             let l:last_word = l:token
-        elseif '[' == l:token
-            call SkipFunctionArrayDeclarators(l:tokeniser)
-        elseif ',' == l:token
+        elseif '[' ==# l:token
+            call s:SkipFunctionArrayDeclarators(l:tokeniser)
+        elseif ',' ==# l:token
             if l:last_word is v:null
                 throw 'invalid'
             else
@@ -196,7 +192,7 @@ function ParseFunctionProtoType() abort
     " Ensure either ; for declaration or { for definition
     let l:tokeniser.allowed_symbols = ';{'
     let l:token = l:tokeniser.next()
-    if !InString(l:tokeniser.allowed_symbols, l:token)
+    if !s:InString(l:tokeniser.allowed_symbols, l:token)
         throw 'invalid'
     endif
 
@@ -204,7 +200,7 @@ function ParseFunctionProtoType() abort
 endfunction
 
 
-function MatchBackForward(pattern) abort
+function s:MatchBackForward(pattern) abort
     let l:buf_num = bufnr()
     let l:cur_line_num = line('.')
 
@@ -228,13 +224,13 @@ function MatchBackForward(pattern) abort
 endfunction
 
 
-function FindDuplicateParam(param) abort
+function s:FindDuplicateParam(param) abort
     let l:duplicate = v:null
-    let l:pattern = '^\s*\* @param\s\+' . a:param . '\s'
+    let l:pattern = '^\s*\* @param\s\+' .. a:param .. '\s'
 
     " Search current buffer first
     let l:buf_num = bufnr()
-    let l:match_idx = MatchBackForward(l:pattern)
+    let l:match_idx = s:MatchBackForward(l:pattern)
 
     if l:match_idx < 0
         " Try other buffers
@@ -271,15 +267,15 @@ function FindDuplicateParam(param) abort
 endfunction
 
 
-function AddFunctionComment(has_return_val, params) abort
+function s:AddFunctionComment(has_return_val, params) abort
     let l:doxygen = ['/**', ' * @brief']
 
     if len(a:params) > 0
         let l:doxygen += [' *']
         for l:param in a:params
-            let l:duplicate = FindDuplicateParam(l:param)
+            let l:duplicate = s:FindDuplicateParam(l:param)
             if l:duplicate is v:null
-                let l:doxygen += [' * @param ' . l:param]
+                let l:doxygen += [' * @param ' .. l:param]
             else
                 let l:doxygen += l:duplicate
             endif
@@ -296,43 +292,52 @@ function AddFunctionComment(has_return_val, params) abort
 endfunction
 
 
-function doxygen#AddComment() abort
+function DoxygenAddComment() abort
     try
-        let l:proto_data = ParseFunctionProtoType()
+        let l:proto_data = s:ParseFunctionProtoType()
     catch /\(invalid\|eof\)/
-        call PrintError('Dox: no function prototype found')
+        call s:PrintError('Dox: no function prototype found')
         return
     endtry
 
-    call AddFunctionComment(l:proto_data.has_return_val, l:proto_data.params)
+    call s:AddFunctionComment(l:proto_data.has_return_val, l:proto_data.params)
 endfunction
 
 
-function doxygen#WarningsQuickfix(...) abort
+function DoxygenWarnings(...) abort
     if !executable('doxygen')
-        PrintError("Cannot find 'doxygen' executable")
+        call s:PrintError("Cannot find 'doxygen' executable")
         return
     endif
 
+    " Parameters specify input paths. If none are given, use the directory of
+    " the current file
+    if len(a:000) > 0
+        let l:input_paths = join(a:000)
+    else
+        let l:input_paths = expand('%:p:h')
+    endif
+
+    " TODO, very targeted... can parse from an existing Doxyfile
     let l:doxyfile_template =<< trim eval END
         EXTRACT_STATIC = YES
         QUIET = YES
         WARN_NO_PARAMDOC = YES
-        INPUT = `=join(a:000)`
+        INPUT = `=l:input_paths`
         RECURSIVE = YES
         GENERATE_HTML = NO
     END
 
-    cgetexpr system('doxygen -', l:doxyfile_template)
+    botright cgetexpr system('doxygen -', l:doxyfile_template)
 
     let l:qf_data = getqflist(#{size: 1})
     if l:qf_data.size > 0
-        copen
+        botright copen
     else
         echomsg 'No Doxygen warnings found'
     endif
 endfunction
 
 
-command -bar Dox call doxygen#AddComment()
-command -nargs=* -complete=file -bar Dow call doxygen#WarningsQuickfix(<f-args>)
+command -bar Dox call DoxygenAddComment()
+command -nargs=* -complete=file -bar Dow call DoxygenWarnings(<f-args>)
