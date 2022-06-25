@@ -1,4 +1,4 @@
-" TODO - header, g:loaded_, cpoptions, remove bangs
+" TODO - script header, g:loaded_, cpoptions
 " Limit  number of tokens parsed
 const s:MAX_TOKENS = 128
 
@@ -10,29 +10,29 @@ const s:MAX_TOKENS = 128
 "   for goto if inline int long register restrict return short signed sizeof
 "   static struct switch typedef union unsigned void volatile while
 
-function! PrintError(msg) abort
+function PrintError(msg) abort
     echohl ErrorMsg
     echomsg a:msg
     echohl None
 endfunction
 
 
-function! IsSymbol(token) abort
+function IsSymbol(token) abort
     return match(a:token, '\w') < 0
 endfunction
 
 
-function! InList(list, item) abort
+function InList(list, item) abort
     return index(a:list, a:item) >= 0
 endfunction
 
 
-function! InString(string, sub) abort
+function InString(string, sub) abort
     return stridx(a:string, a:sub) >= 0
 endfunction
 
 
-function! NewTokeniser(allowed_symbols, disallowed_keywords) abort
+function NewTokeniser(allowed_symbols, disallowed_keywords) abort
     let l:tokeniser = #{
         \ tokens_remaining: s:MAX_TOKENS,
         \ allowed_symbols: a:allowed_symbols,
@@ -101,7 +101,7 @@ function! NewTokeniser(allowed_symbols, disallowed_keywords) abort
 endfunction
 
 
-function! SkipFunctionArrayDeclarators(tokeniser) abort
+function SkipFunctionArrayDeclarators(tokeniser) abort
     let l:allowed_symbols = "~!$%^&*()+./|\'-=<>?[]:\";"
     let l:disallowed_keywords = [
         \ 'auto', 'break', 'case', 'continue', 'default', 'do', 'else',  'for',
@@ -133,7 +133,7 @@ endfunction
 
 
 " Not supported - attributes, functions returning a pointer to an array
-function! ParseFunctionProtoType() abort
+function ParseFunctionProtoType() abort
     let l:allowed_symbols = '*(\'
     let l:disallowed_keywords = [
         \ 'auto', 'break', 'case', 'continue', 'default', 'do', 'else', 'for',
@@ -204,7 +204,7 @@ function! ParseFunctionProtoType() abort
 endfunction
 
 
-function! MatchBackForward(pattern) abort
+function MatchBackForward(pattern) abort
     let l:buf_num = bufnr()
     let l:cur_line_num = line('.')
 
@@ -228,7 +228,7 @@ function! MatchBackForward(pattern) abort
 endfunction
 
 
-function! FindDuplicateParam(param) abort
+function FindDuplicateParam(param) abort
     let l:duplicate = v:null
     let l:pattern = '^\s*\* @param ' . a:param
 
@@ -270,7 +270,7 @@ function! FindDuplicateParam(param) abort
 endfunction
 
 
-function! AddFunctionDoxygen(has_return_val, params) abort
+function AddFunctionComment(has_return_val, params) abort
     let l:doxygen = ['/**', ' * @brief']
 
     if len(a:params) > 0
@@ -295,7 +295,7 @@ function! AddFunctionDoxygen(has_return_val, params) abort
 endfunction
 
 
-function! doxygen#Doxygen() abort
+function doxygen#AddComment() abort
     try
         let l:proto_data = ParseFunctionProtoType()
     catch /\(invalid\|eof\)/
@@ -303,8 +303,24 @@ function! doxygen#Doxygen() abort
         return
     endtry
 
-    call AddFunctionDoxygen(l:proto_data.has_return_val, l:proto_data.params)
+    call AddFunctionComment(l:proto_data.has_return_val, l:proto_data.params)
 endfunction
 
 
-command! -bar Dox call doxygen#Doxygen()
+function doxygen#WarningsQuickfix(...) abort
+    let l:doxyfile_template =<< trim eval END
+        EXTRACT_STATIC = YES
+        QUIET = YES
+        WARN_NO_PARAMDOC = YES
+        INPUT = `=join(a:000)`
+        RECURSIVE = YES
+        GENERATE_HTML = NO
+    END
+
+    cexpr system('doxygen -', l:doxyfile_template)
+    cwindow
+endfunction
+
+
+command -bar Dox call doxygen#AddComment()
+command -nargs=* -complete=file -bar Dow call doxygen#WarningsQuickfix(<f-args>)
