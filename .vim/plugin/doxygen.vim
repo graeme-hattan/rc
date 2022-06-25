@@ -230,7 +230,7 @@ endfunction
 
 function FindDuplicateParam(param) abort
     let l:duplicate = v:null
-    let l:pattern = '^\s*\* @param ' . a:param
+    let l:pattern = '^\s*\* @param\s\+' . a:param . '\s'
 
     " Search current buffer first
     let l:buf_num = bufnr()
@@ -238,9 +238,10 @@ function FindDuplicateParam(param) abort
 
     if l:match_idx < 0
         " Try other buffers
-        let l:keys = #{buflisted: 1, bufloaded: 1}
+        let l:keys = #{buflisted: 1}
         for buf_info in getbufinfo(l:keys)
             if l:buf_num != buf_info.bufnr
+                call bufload(l:buf_num)
                 let l:lines = getbufline(buf_info.bufnr, 1, '$')
                 let l:match_idx = match(l:lines, l:pattern)
                 if l:match_idx >= 0
@@ -308,6 +309,11 @@ endfunction
 
 
 function doxygen#WarningsQuickfix(...) abort
+    if !executable('doxygen')
+        PrintError("Cannot find 'doxygen' executable")
+        return
+    endif
+
     let l:doxyfile_template =<< trim eval END
         EXTRACT_STATIC = YES
         QUIET = YES
@@ -317,8 +323,14 @@ function doxygen#WarningsQuickfix(...) abort
         GENERATE_HTML = NO
     END
 
-    cexpr system('doxygen -', l:doxyfile_template)
-    cwindow
+    cgetexpr system('doxygen -', l:doxyfile_template)
+
+    let l:qf_data = getqflist(#{size: 1})
+    if l:qf_data.size > 0
+        copen
+    else
+        echomsg 'No Doxygen warnings found'
+    endif
 endfunction
 
 
