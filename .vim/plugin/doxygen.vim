@@ -313,6 +313,16 @@ function DoxygenWarnings(...) abort
         return
     endif
 
+    " TODO, very targeted... can parse from an existing Doxyfile
+    let l:doxyfile =<< trim END
+        EXTRACT_STATIC = YES
+        QUIET = YES
+        WARN_NO_PARAMDOC = YES
+        RECURSIVE = YES
+        GENERATE_HTML = NO
+        GENERATE_LATEX = NO
+    END
+
     " Parameters specify input paths. If none are given, use the directory of
     " the current file
     if len(a:000) > 0
@@ -321,18 +331,8 @@ function DoxygenWarnings(...) abort
         let l:input_paths = expand('%:p:h')
     endif
 
-    " TODO, very targeted... can parse from an existing Doxyfile
-    let l:doxyfile_template =<< trim eval END
-        EXTRACT_STATIC = YES
-        QUIET = YES
-        WARN_NO_PARAMDOC = YES
-        INPUT = `=l:input_paths`
-        RECURSIVE = YES
-        GENERATE_HTML = NO
-        GENERATE_LATEX = NO
-    END
-
-    let l:warnings = systemlist('doxygen -', l:doxyfile_template)
+    let l:doxyfile += ['INPUT = ' .. l:input_paths]
+    let l:warnings = systemlist('doxygen -', l:doxyfile)
 
     " No output formats is deliberate, remove the message
     if get(l:warnings, 0) =~ '^warning: No output formats selected!'
