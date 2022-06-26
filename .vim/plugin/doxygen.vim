@@ -305,6 +305,9 @@ endfunction
 
 
 function DoxygenWarnings(...) abort
+    " Write all buffers
+    wall
+
     if !executable('doxygen')
         call s:PrintError("Cannot find 'doxygen' executable")
         return
@@ -326,12 +329,18 @@ function DoxygenWarnings(...) abort
         INPUT = `=l:input_paths`
         RECURSIVE = YES
         GENERATE_HTML = NO
+        GENERATE_LATEX = NO
     END
 
-    botright cgetexpr system('doxygen -', l:doxyfile_template)
+    let l:warnings = systemlist('doxygen -', l:doxyfile_template)
 
-    let l:qf_data = getqflist(#{size: 1})
-    if l:qf_data.size > 0
+    " No output formats is deliberate, remove the message
+    if get(l:warnings, 0) =~ '^warning: No output formats selected!'
+        call remove(l:warnings, 0)
+    endif
+
+    if len(l:warnings) > 0
+        cgetexpr l:warnings
         botright copen
     else
         echomsg 'No Doxygen warnings found'

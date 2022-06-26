@@ -39,6 +39,9 @@ endfunction
 
 
 function IarBuild() abort
+    " Write all buffers
+    wall
+
     if !executable('IarBuild')
         call s:PrintError("Cannot find 'IarBuild' executable")
         return
