@@ -1,0 +1,52 @@
+#!/bin/bash
+
+while ! [ -d .svn ] && [ "$(pwd)" != / ]
+do
+    cd ..
+done
+
+if ! [ -d .svn ]
+then
+    echo 'No SVN repository found' >&2
+    exit 1
+fi
+
+if [ $# = 0 ]
+then
+    echo "Usage: $0 [GREP_ARGS...] PATTERN [GLOB]" >&2
+    exit 1
+fi
+
+grep_args=(-Hns)
+while [ $# -gt 2 ]
+do
+    grep_args+=($1)
+    shift
+done
+
+grep_args+=($1)
+glob=*
+
+# If we have at least 2 args, last might be a pattern or optional glob.
+if [ $# == 2 ]
+then
+    if [[ $1 == -* ]]
+    then
+        # Second last is an option, last is the pattern. Add it to the array.
+        grep_args+=($2)
+    else
+        # Last is probably a glob, but might not be if we have something like
+        # svngrep -C 5 xxx. In this case do svngrep -C 5 -- xxx
+        glob=$2
+    fi
+fi
+
+safe_pwd=$(pwd | sed 's:\\:\\\\:')
+svn status -v |
+    sed -e '/^?/ n' \
+        -e 's:^.\{28\}[^ ]* *::' \
+        -e 's:\\:/:g' \
+        -e 's:\r$::' \
+        -e "s:^:$safe_pwd/:" |
+    xargs -d \\n grep --include="$glob" "${grep_args[@]}" |
+    tr -d \\r
