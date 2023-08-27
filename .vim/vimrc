@@ -1,0 +1,201 @@
+function Setup() abort
+    set background=dark
+    set backspace=indent,eol,start
+    set mouse=a
+    set nocompatible
+    set hlsearch
+    set laststatus=2
+    set ruler
+    set showcmd
+    set showtabline=2
+    set spell
+    set title
+    set visualbell
+
+    set linebreak
+    set breakindent
+    set breakindentopt=list:-1
+    set showbreak=>
+
+    set ignorecase
+    set smartcase
+
+    " Popup menu
+    set complete=.,w,b,u,t
+    set completeopt=longest,menuone,popup
+    set wildmenu
+    set wildoptions=pum
+
+    " :0  - switch labels aligned with braces
+    " (0  - align lines inside parentheses
+    " W2s - indent 2*shiftwidth when opening parentheses is last on line
+    " k2s - indent 2*shiftwidth inside if/for/while parentheses
+    " P1  - indent pragmas
+    set cinoptions=:0,(0,W4,k4,P1
+    set tabstop=4
+    set softtabstop=4
+    set shiftwidth=4
+    set expandtab
+    set textwidth=80
+    set colorcolumn=+1
+
+    set switchbuf=uselast
+
+    " j - remove comment leader when joining lines
+    " n - enable formatting for numbered lists
+    set formatoptions+=jn
+
+    " Treat Doxygen tags like numbered lists. When Doxygen tag is followed by a
+    " double space, new lines are started on that column when wrapping.
+    let &formatlistpat = '^\s*\(\d\+[\]:.)}\t ]\|[->]\|@\w\+ \=\w*\)\s*'
+
+    filetype plugin indent on
+    syntax on
+
+    if has("gui_running")
+        " No menu bar, no toolbar
+        set guioptions-=m
+        set guioptions-=T
+        set guifont=Consolas:h9
+    endif
+
+    " Enable and configure :Man command
+	runtime! ftplugin/man.vim
+	let g:ft_man_open_mode = 'vert'
+	set keywordprg=:Man
+
+	packadd! cfilter
+	packadd! matchit
+
+    " Allow another vim installation on the same system (eg Windows/Cygwin) to
+    " share settings by setting vim_home and sourcing this file.
+    if !exists('g:vim_home')
+        const g:vim_home = $HOME
+    endif
+
+    " Create swap and undo files, but don't litter them everywhere
+    " TODO, cleanup for files that no longer exist
+    call mkdir(g:vim_home . '/.vim/swap', 'p')
+    call mkdir(g:vim_home . '/.vim/undo', 'p')
+    let &directory = g:vim_home .. '/.vim/swap//,' .. &directory
+    let &undodir = g:vim_home .. '/.vim/undo,' .. &undodir
+    set undofile
+
+    " Use the default color scheme with some tweaks
+    highlight clear
+    highlight ColorColumn guibg=#202020
+    highlight Normal guibg=Black guifg=Grey
+    highlight PMenu guibg=DarkRed
+    highlight PMenuSel guibg=Brown
+    highlight TabLine cterm=italic guibg=#505050
+
+    " Make the terminal and GUI look similar. Lots of terminals probably don't
+    " support this, but just list some likely options.
+    if ['linux', 'dumb']->index(&term) < 0
+        set termguicolors
+        call EnableTerminalUndercurl()
+
+        " Enable the undercurl again if the color scheme changes
+        augroup term_undercurl
+        autocmd!
+            autocmd ColorScheme * call EnableTerminalUndercurl()
+        augroup END
+    endif
+
+    let &grepprg = 'grep -Hnr $*'
+    if has('win32unix')
+        let &grepprg ..= ' \| sed -r ''s/\r$//'''
+    endif
+
+    command -nargs=+ -complete=file G execute 'grep! ' .. <q-args>
+    command -nargs=+ -complete=file Gc
+        \ execute 'grep! --include=''*.c' ' .. <q-args>
+
+    command -nargs=+ -complete=file Gh
+        \ execute 'grep! --include=''*.h'' ' .. <q-args>
+
+    command -nargs=+ -complete=file Gch
+        \ execute 'grep! --include=''*.[ch]'' ' .. <q-args>
+
+    command -nargs=+ -complete=file Gpy
+        \ execute 'grep! --include=''*.py'' ' .. <q-args>
+
+    command -nargs=+ Sg {
+        var esc_args = escape(<q-args>, '!"$&''()*,:;<=>?@[\]^`{|}')
+        cgetexpr system(g:vim_home .. '/.vim/shell/svngrep ' .. esc_args)
+    }
+
+    augroup misc
+        autocmd!
+        autocmd FileType man,qf setlocal colorcolumn=0 nospell
+        autocmd BufWritePre * call TrimTrailingSpace()
+        autocmd BufNewFile *.[ch] call LoadCTemplate()
+    augroup END
+endfunction
+
+function TrimTrailingSpace() abort
+    let l:pos = getcurpos()
+    keepjumps %s/\v\s+$//e
+    call cursor(l:pos[1:])
+endfunction
+
+function LoadCTemplate() abort
+    let l:file_name = expand('%:t')
+    let l:extension = expand('%:e')
+    let l:template = g:vim_home .. '/.vim/templates/template.' .. l:extension
+
+    if filereadable(l:template)
+        let l:year = strftime('%Y')
+
+        let l:guard = substitute(l:file_name, '\(\l\)\(\u\)', '\1_\2', 'g')
+        let l:guard = substitute(l:guard, '\.', '_', 'g')
+        let l:guard = toupper(l:guard)
+
+        " Load the template, keeping the alternate file intact
+        execute 'keepalt read ++edit' l:template
+
+        " Delete the first line which was there in the empty file
+        1delete
+
+        silent! %s/{FILE_NAME}/\=l:file_name/gI
+        silent! %s/{GUARD}/\=l:guard/gI
+        silent! %s/{YEAR}/\=l:year/gI
+
+        " Where to leave the cursor
+        silent! %s/{CURSOR}//I
+    endif
+endfunction
+
+function EnableTerminalUndercurl() abort
+    " Non-standard escapes for undercurl, only works if they are supported!
+    let &t_8u = "\e[58:2::%lu:%lu:%lum"
+    let &t_Cs = "\e[4:3m"
+    let &t_Ce = "\e[4:0m"
+
+    " Enable terminal undercurl in all cases where the GUI would have it.
+    let l:updates = []
+    for l:group in hlget()
+        " Does the GUI use an undercurl for this highlight group?
+        if l:group->get('gui', {})->get('undercurl', 0)
+            " Does the highlight group have ctermbg set? If so it needs to be
+            " unset.
+            if has_key(l:group, 'ctermbg')
+                unlet l:group.ctermbg
+
+                " Not enough just to update the highlight group after removing
+                " attributes, it needs to be explicitly cleared first.
+                let l:cleared = {'name': l:group.name, 'cleared': v:true}
+                eval l:updates->add(l:cleared)
+            endif
+
+            let l:group['cterm'] = {'undercurl': v:true}
+            eval l:updates->add(l:group)
+        endif
+    endfor
+
+    call hlset(l:updates)
+endfunction
+
+" Call the setup function now the others are defined (keeps all the main options
+" at the top).
+call Setup()
