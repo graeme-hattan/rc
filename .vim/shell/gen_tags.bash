@@ -87,13 +87,15 @@ else
     find \( "${exclude_args[@]}" \) -prune -o -type f >gtags.files
 fi
 
+gtags_datadir="$(gtags --config=datadir)"
+
 # TODO, global -u
 echo 'Starting gtags'
 TIMEFORMAT='Completed gtags generation in %1Rs'
 time gtags \
         --accept-dotfiles \
         --gtagslabel=native-pygments \
-        --gtagsconf=/usr/share/gtags/gtags.conf \
+        --gtagsconf="$gtags_datadir/gtags/gtags.conf" \
         &
 
 echo 'Starting universal ctags'
@@ -106,7 +108,6 @@ time ctags \
         --map-C=+.h --kinds-C='+{prototype}{externvar}' \
         --fields='-{typeref}{epoch}' \
         --extras='+{inputFile}' \
-        --exclude=@tags_exclusions \
         -L gtags.files \
         &
 
